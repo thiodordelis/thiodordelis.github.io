@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" type="text/css">
+  <title>Renderview - Just a static page generator</title>
+</head>
+
+<body>
+  <div id="block">
+    <h1 id="title">Γράφοντας ένα static page generator από το μηδέν</h1>
+    <div id="author">Theodoros Deligiannidis</div>
+    <div id="date">Τετάρτη, 25 Μαρτίου 2020</div>
+    <div id="content">
+      <p>Σίγουρα static page generators υπάρχουν πάρα πολλοί, αλλά μιας και μένουμε σπίτι αυτό τον καιρό, είπα να πιάσω κάτι καινούργιο.</p>
+      <p>Οι επιλογές για blog πλατφόρμες είναι πάρα πολλές και σίγουρα ο #1 προορισμός είναι το wordpress το οποίο είναι too much για το σκοπό που θέλω. Θα έλεγα ότι μου αρμόζει περισσότερο η πλατφορμα <a href="https://ghost.org">ghost</a> αλλά και πάλι τα ~30$/μήνα πολλά. Στο παρελθόν είχα δοκιμάσει το <a href="https://jekyllrb.com/">Jekyll</a> αλλά αν θυμάμαι καλά, είχα ένα πρόβλημα με τα αρχεία markdown και να πω την αλήθεια, ποτέ δεν μου άρεσε η ruby!</p>
+      <h2 id="concept">Concept</h2>
+      <p>Το concept είναι απλό: Γράφεις τα άρθρα σου σε markdown, τρέχεις μια CLI εφαρμογή και σου φτιάχνει ένα αρχείο HTML με όλα τα άρθρα σε μορφή blog.</p>
+      <p>Για το σκοπό αυτό, το Node.js πιστεύω είναι το καταλληλότερο.</p>
+      <h2 id="">Πως δουλεύει</h2>
+      <p>Η εφαρμογή βασίζεται κυρίως στο <a href="https://github.com/showdownjs/showdown">showdown.js</a> , του οποίου η δουλειά είναι να μετατρέπει markdown σε html. Επειδή στην πορεία είδα ότι χρειάζομαι έναν τρόπο να αποθηκεύω και metadata μέσα στο markdown αρχείο αλλά να μην φαίνονται στο τελικό αποτέλεσμα, αποφάσισα να τα συμπεριλάβω σε μορφή κλειδιών / τιμής στην αρχή του αρχείου και να τα επεξεργάζομαι με το parse-markdown-metadata. Τα metadata αυτά θα μπορούν να είναι οτιδήποτε πχ title, author, date, tags κτλ.</p>
+      <p>Τέλος χρειαζόμαστε μια templating γλώσσα, ώστε να γράψουμε τον σκελετό της σελίδας σε html και να ορίσουμε πως θα φαίνονται οι τίτλοι, το κείμενο, η ημερομηνία και φυσικά το layout(css). Τη δουλειά αυτή θα την αναλάβει η <a href="https://handlebarsjs.com">Handlebars</a> .</p>
+      <h2 id="-1">Κώδικας</h2>
+      <p>Πρώτα θα πρέπει να κάνουμε εγκατάσταση μέσω του npm τα πακέτα από τα οποία εξαρτάται η εφαρμογή.</p>
+      <pre><code>npm install showdown jsdom js-beautify glob handlebars parse-markdown-metadata
+</code></pre>
+      <p>και φυσικά να τα χρησιμοποιήσουμε:</p>
+      <pre><code>const fs = require('fs');
+const glob = require('glob');
+const beautify = require('js-beautify').html;
+const showdown = require('showdown');
+const ParseMarkdownMetadata = require('parse-markdown-metadata');
+const Handlebars = require("handlebars");
+</code></pre>
+      <p>H function που μετατρέπει το markdown σε html είναι:</p>
+      <pre><code>function toHtml(input)
+{
+    converter.setFlavor('vanilla');
+    return converter.makeHtml(input);
+}
+</code></pre>
+      <p>Ανάλογα με το spec του markdown που θέλουμε, το ορίζουμε με την αντίστοιχη επιλογή <code>setFlavor('vanilla')</code> (περισσότερα <a href="https://github.com/showdownjs/showdown#flavors">εδώ</a> ).</p>
+      <p>Έπειτα, θα αρχικοποιήσουμε τη showdown με το αρχείο html που θέλουμε να έχουμε σαν οδηγό.</p>
+      <pre><code>let html = fs.readFileSync('index.html').toString();
+let template = Handlebars.compile(html);
+let data = {"posts":[]};
+</code></pre>
+      <p>Το αρχείο html μπορεί να μοιάζει κάπως έτσι:</p>
+      <pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+    &lt;head&gt;
+        &lt;title&gt;Renderview - Just a static page generator&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        {{#posts}}
+        &lt;div id="block"&gt;
+            &lt;h1 id="title"&gt;{{title}}&lt;/h1&gt;
+            &lt;div id="author"&gt;{{author}}&lt;/div&gt;
+            &lt;div id="date"&gt;{{date}}&lt;/div&gt;
+            &lt;div id="content"&gt;{{{content}}}&lt;/div&gt;
+            &lt;div&gt;{{email}}&lt;/div&gt;
+            &lt;hr&gt;
+        &lt;/div&gt;
+        {{/posts}}
+    &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+      <p>Έδω στην ουσία λέμε την handlebars οτι μέσα στο αρχείο html, θα πρέπει να αντικαταστήσεις οτιδήποτε υπάρχει μέσα σε αγκύλες με τιμές τις οποίες θα τις βρείς στη μεταβλητή data. Επειδή προκειται για blog, τότε ο κώδικας HTML που περικλείεται μέσα στα <code>{{#posts}} {{/posts}}</code> , θα πρέπει να τον επαναλάμβάνεται(loop) για όσα αρχεία md υπάρχουν μέσα στο root φάκελο. Μια μικρή λεπτομέρεια είναι ότι το content, δηλαδή το κείμενο του άρθρου θα πρέπει να είναι ανάμεσα σε τριπλές αγκύλες <code>{{{ }}}</code> διότι δε θελουμε να γίνει escaped απο την handlebar, το θέλουμε άθικτο(περισσότερα εδώ)</p>
+      <p>Τέλος έμεινε να γράψουμε τον κώδικα που θα βρίσκει όλα τα αρχεία που τελειώνουν σε .md μέσα στο φάκελο μας, να τραβήξει τα metadata που υπάρχουν αλλά και το κυρίως κείμενο το οποίο θα το μετατρέψει σε html. Όλα αυτά θα αποθηκευτούν στο πίνακα(array) data.</p>
+      <p>Ο πίνακας για παράδειγμα θα έχει αυτά τα περιεχόμενα:</p>
+      <pre><code>data = {"posts":[
+{"title":"This is a title", "author":"Theodoros Deligiannidis", "date":"11/01/2020", "content":"&lt;html&gt;...&lt;/html&gt;"},
+{...}
+]};
+</code></pre>
+      <p>To loop για όλη την παραπάνω διαδικασία είναι:</p>
+      <pre><code>glob(__dirname + '/*.md', {}, (err, files)=&gt;{
+    let mdfile,md;
+    files.forEach(function (file) {
+        mdfile = fs.readFileSync(file).toString();
+        md = new ParseMarkdownMetadata(mdfile);
+        md.props.content = toHtml(md.content);
+        data.posts.push(md.props);
+    });
+    let result = template(data);
+    let stream = fs.createWriteStream(outputFilename);
+
+    stream.once('open', function(fd) {
+        stream.end(beautify(result, { indent_size: 2, space_in_empty_paren: true }));   
+    });
+});
+</code></pre>
+      <p>Το νέο αρχείο html που δημιουργείται, βρίσκεται στο φάκελο _public και είναι έτοιμο να το ανεβάσουμε στο github ή όπου αλλού θέλουμε! Στο τέλος θα παρατηρήσατε ότι έκανα και ένα beautify στο αρχείο html για να διαβάζεται πιο εύκολα αλλά και για να έχει σωστή στοίχιση.</p>
+      <p>Τρέχουμε την εφαρμοφή δίνοντας:</p>
+      <pre><code>node app.js
+</code></pre>
+      <p>Όπως είδαμε, με node.js, λίγα πακέτα και λίγο φαντασία, γράφουμε ένα ισάξιο κλώνο του Jekyll. Βέβαια, λείπουν αρκετά χαρακτηριστικά όπως tags και η σειρά των άρθρων αλλά αυτά αργότερα, σε ένα άλλο άρθρο!</p>
+      <p>Ακολουθούν όλα τα αρχεία.</p>
+      <h2 id="appjs">app.js</h2>
+      <pre><code>const fs = require('fs');
+const glob = require('glob');
+const beautify = require('js-beautify').html;
+const showdown  = require('showdown');
+const ParseMarkdownMetadata = require('parse-markdown-metadata');
+const Handlebars = require("handlebars");
+
+let publicDir = './_public';
+let outputFilename = publicDir+'/index.html'
+
+const conf = {};
+let converter = new showdown.Converter(conf);
+
+if (!fs.existsSync(publicDir)){
+    fs.mkdirSync(publicDir);
+}
+
+function toHtml(input)
+{
+    converter.setFlavor('vanilla');
+    return converter.makeHtml(input);
+}   
+
+let html = fs.readFileSync('index.html').toString();
+let template = Handlebars.compile(html);
+let data = {"posts":[]};
+
+glob(__dirname + '/*.md', {}, (err, files)=&gt;{
+    let mdfile,md;
+    files.forEach(function (file) {
+        mdfile = fs.readFileSync(file).toString();
+        md = new ParseMarkdownMetadata(mdfile);
+        md.props.content = toHtml(md.content);
+        data.posts.push(md.props);
+    });
+    let result = template(data);
+    let stream = fs.createWriteStream(outputFilename);
+
+    stream.once('open', function(fd) {
+        stream.end(beautify(result, { indent_size: 2, space_in_empty_paren: true }));   
+    });
+});
+</code></pre>
+      <h2 id="myfirstpostmd">myfirstpost. md</h2>
+      <pre><code>title: My first post
+author: Theodoros Deligiannidis
+date: 20/03/2020
+email: thiodor@gmail.com
+
+#Hello word
+</code></pre>
+      <h2 id="index_skeletonhtml">index_skeleton.html</h2>
+      <pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+    &lt;head&gt;
+        &lt;meta charset="UTF-8"&gt;
+        &lt;meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"&gt;
+        &lt;meta http-equiv="X-UA-Compatible" content="ie=edge"&gt;
+        &lt;link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" type="text/css"&gt;
+        &lt;title&gt;Just a blog&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        {{#posts}}
+        &lt;div id="block"&gt;
+            &lt;h1 id="title"&gt;{{title}}&lt;/h1&gt;
+            &lt;div id="author"&gt;{{author}}&lt;/div&gt;
+            &lt;div id="date"&gt;{{date}}&lt;/div&gt;
+            &lt;div id="content"&gt;{{{content}}}&lt;/div&gt;
+            &lt;div&gt;{{email}}&lt;/div&gt;
+            &lt;hr&gt;
+        &lt;/div&gt;
+        {{/posts}}
+    &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+      <p>Happy compiling!</p>
+    </div>
+    <hr>
+  </div>
+  <div id="block">
+    <h1 id="title">Πού πάμε;</h1>
+    <div id="author">Theodoros Deligiannidis</div>
+    <div id="date">Παρασκευή, 20 Μαρτίου 2020</div>
+    <div id="content">
+      <p>Μέσα στο 2020 είπα ότι θα ξεκινήσω να γράφω τεχνικά άρθρα, 1ον γιατί
+        μου δίνει ευχαρίστηση να μοιράζομαι γνώση με άλλους και 2ον γιατί δεν
+        το έχω καθόλου με τη γραφή και θέλω απλά να γίνω καλύτερος σε αυτό.</p>
+      <p>Το 3ο μου post κατά σειρά δεν έχει να κάνει καθόλου με linux ή web
+        applications, αλλά με όλα αυτά που γίνονται τελευταία στον
+        πλανήτη/χώρα/πόλη/σπίτι μας, με πρωταγωνιστή την πανδημία που προέκυψε.</p>
+      <p>Δε θα αναφερθώ στο γιατί και το πώς, αν είναι hoax ή παιχνίδι των διαφόρων
+        φαρμακευτικών εταιριών, αυτό το αφήνω στους ειδικούς, στους τρομολάγνους και στα troll. Η
+        ερώτηση που κάνω στον εαυτό μου. αλλά και στην σύζυγό μου, είναι μία:
+        <code>Πού πάμε;</code></p>
+      <p>Δυστυχώς, απάντηση ακόμα δεν πήρα και η αλήθεια είναι ότι θα αργήσω να
+        πάρω, ωστόσο θα προσπαθήσω να βρω μία. </p>
+      <h3 id="">Η αρχή</h3>
+      <p>Ακόμα θυμάμαι εκείνη την Τρίτη, που πιθανότατα είχα ξυπνήσει για να πάω
+        στο πανεπιστήμιο, όταν στη μικροσκοπική μου φοιτητική τηλεόραση έβλεπα
+        στο Euronews τους δίδυμους πύργους να πέφτουν, ο ένας πίσω από τον
+        άλλο.</p>
+      <p>Ήταν σοκαριστική εικόνα και είμαι πεπεισμένος ότι αυτή ήταν η αρχή των
+        δεινών, τουλάχιστον για τη γενιά μας. Νομίζω πως τότε η ανθρωπότητα γύρισε
+        σελίδα στην ιστορία της, η επόμενη σελίδα όμως δεν θα ήταν ευχάριστη.</p>
+      <h3 id="fastforward2015">Fast forward έως 2015</h3>
+      <p>Σίγουρα η 9/11 δεν έχει σχέση με όλα αυτά που συμβαίνουν γύρω μας,
+        αλλά για μένα τώρα που το βλέπω εκ των υστέρων, σίγουρα αποτελεί την
+        αρχή. Μεταξύ 2001 και 2015 έγιναν πολλά, που τα περισσότερα δεν μας
+        άγγιξαν, τουλάχιστον άμεσα. Στο διάστημα αυτό, σιγά σιγά συντελέστηκαν
+        γεγονότα και καταστρώθηκαν (κρυφά;) σχέδια που θα άλλαζαν τον κόσμο
+        μας. Μέσα στα θετικά ήταν η τεχνολογική ανάπτυξη και η πρόοδος που
+        είχαμε, με αποτέλεσμα τα κινητά, οι υπολογιστές και το software να
+        γίνουν αναπόσπαστα εργαλεία της καθημερινότητάς μας.</p>
+      <p>Όλα τα θετικά όμως πράγματα μας βόλεψαν και μας έφεραν ακόμα πιο κοντά
+        στην αδράνεια, όχι απαραίτητα την σωματική αλλά περισσότερο στην
+        κοινωνική αδράνεια.</p>
+      <p>Έτσι βολευτήκαμε, ξεχάσαμε αξίες και αφεθήκαμε στις selfie φωτογραφίες
+        που έγιναν το talk of the town. Μαθημένοι επίσης σε καλούς μισθούς, ψώνια και lux εκδρομές ( βλέπε εποχές ΠΑΣΟΚ, όπως λέμε τώρα αστειευόμενοι) , το αποτέλεσμα ήταν να
+        γίνουμε λιγότερο παραγωγικοί.</p>
+      <p>Πώς, θα ρωτάτε, έχουν σχέση όλα αυτά με το 2015;</p>
+      <p>Νομίζω πως όταν κορυφώθηκε η κρίση του 2008, μας έπιασε
+        απροετοίμαστους - οικονομικά, κοινωνικά και επαγγελματικά.</p>
+      <p>Κοινώς, οι περισσότεροι από εμάς δεν είχαμε ένα back up plan, δεν
+        είχαμε έτοιμες απαντήσεις σε καίρια ερωτήματα, όπως :</p>
+      <ul>
+        <li>Εξασφάλισα χρήματα για το μέλλον μου (και της οικογένειάς μου);</li>
+        <li>Είμαι αυτάρκης;</li>
+        <li>Αυτό που ζω τώρα, είναι πραγματικά αυτό που θέλω και μπορώ να υποστηρίξω;</li>
+      </ul>
+      <p>Οι ερωτήσεις σίγουρα διαφέρουν από άτομο σε άτομο, αλλά σίγουρα πολλές είναι κοινές ερωτήσεις για όλους μας.</p>
+      <p>Όσον αφορά την κορύφωση της κρίσης του 2015, η οποία ξεκίνησε το 2008,
+        ίσως θα έπρεπε να το είχαμε δει να έρχεται, αλλά ήμασταν "αλλού" (βλέπε
+        πιο πάνω-talk of the town). Αφεθήκαμε τόσο πολύ στην καθημερινότητα,
+        άλλοι στο μόχθο για τα προς το ζην και άλλοι στην καλοπέραση, η οποία
+        αποδείχτηκε ψεύτικη.</p>
+      <p>Το αποτέλεσμα; Κλειστές τράπεζες και όλα τα επακόλουθα, που τόσο πολύ
+        μας κόστισαν.</p>
+      <h3 id="skipto2019">Skip to 2019</h3>
+      <p>Και κάπου εδώ, λίγους μήνες πριν, φαίνεται πως βγαίνουμε από το σκοτάδι και ότι υπάρχει ελπίδα. Δε χρωματίζω την κατάσταση, αλλά πιθανώς η
+        κυβέρνηση να έμαθε από τα λάθη των προηγουμένων.</p>
+      <p>Και πάνω που νομίζαμε οτι οι επιλογές που κάναμε τόσα χρόνια ήταν οι
+        σωστές (και σίγουρα για πολλούς είναι), έρχεται μία πανδημία να σαρώσει
+        τα πάντα. Επειδή τυχαίνει να είμαι ιατρός, βλέπω τι εστί αυτή η νέα
+        κατάσταση εκ των έσω και ξέρω ότι ο ιός αυτός ήρθε για να μείνει.</p>
+      <p>Και ποια η σχέση με τις επιλογές μας; Ο ιός είναι μια "φυσική
+        καταστροφή", για την οποία δεν μπορούμε να κάνουμε πολλά. Αυτό που μας
+        το κάνει πιο δύσκολο, είναι ότι δε φροντίσαμε για τις εναλλακτικές
+        μας, που θα έκαναν τη ζωή λίγο πιο εύκολη αλλά και ευχάριστη.</p>
+      <p>Μία από τις λάθος επιλογές, ή ίσως μία από τις παγίδες στις
+        οποίες πέσαμε, είναι ότι διαλέξαμε τις μεγαλουπόλεις ως το ιδανικότερο
+        μέρος για να ζήσουμε. Εδώ έχει τα καλύτερα πολυκαταστήματα, τα
+        καλύτερα και πιο in bars, τα περισσότερα μέλη του Tinder για άμεση
+        "εκτόνωση" και πολλά άλλα.</p>
+      <p>Και όλα αυτά; Έχουν τώρα σημασία; Καμία!</p>
+      <p>Σίγουρα η επόμενη λέξη που θα έρχεται στο μυαλό σας είναι η
+        απαισιοδοξία. Ίσως εκ φύσεώς μου να τα βλέπω όλα μαύρα, αλλά δεν μπορώ
+        να παραβλέψω μια επίσημη πανδημία και τις επιπτώσεις της.</p>
+      <p>Εκτός του φόβου που με διακατέχει, πρώτα για την οικογένειά μου και
+        μετά για όλους τους άλλους, είμαι φοβερά νευριασμένος.</p>
+      <p>Νευριασμένος γιατί δεν μπόρεσα να το προβλέψω (με μια πιο ευρεία
+        έννοια και όχι αυτή καθεαυτή την πανδημία) και να φτιάξω τη ζωή
+        μου πιο απλή και άνετη.</p>
+      <p>Ένα παράδειγμα θα δώσω, από τα πολλά που έχω σκεφτεί. Εδώ που μένουμε
+        και σε ακτίνα 1χλμ. τουλάχιστον, δεν υπάρχει μια παιδική χαρά, μια
+        κούνια να πάω την κόρη μου να κάνει! Για σκεφτείτε το λίγο. Τόσες
+        ευκαιρίες και επιλογές σε μια μεγάλη πόλη και δεν μπορώ να πάω την κόρη
+        μου να κάνει κούνια.</p>
+      <h3 id="-1">Και πού πάμε τελικά;</h3>
+      <p>Ο καθένας πιστεύω πρέπει να πάει εκεί που ανήκει, πίσω στη φύση. Να
+        ξεβολευτούμε από τον καναπέ μας και να γυρίσουμε στις ρίζες μας, εκεί
+        όπου είμαστε φτιαγμένοι σαν άνθρωποι να ζούμε. Είμαστε φτιαγμένοι για
+        απλά και ανθρώπινα πράγματα. Και λέγοντας ανθρώπινα, ΔΕΝ μπορώ να
+        φανταστώ ότι είμαστε φτιαγμένοι για να ζούμε σε τσιμεντουπόλεις, με
+        θερμοκρασίες φούρνου ή ακόμα χειρότερα να προσπερνάμε χιλιάδες
+        αγνώστους καθημερινά δίχως ένα καλημέρα.</p>
+      <ul>
+        <li>Είμαστε φτιαγμένοι να τρώμε απλά και λίγο (φρούτα, καρπούς, λαχανικά, ψάρια). </li>
+        <li>Είμαστε φτιαγμένοι να καταβροχθίζουμε γνώση.</li>
+        <li>Είμαστε φτιαγμένοι να τρέχουμε και να περπατάμε. </li>
+        <li>Είμαστε φτιαγμένοι να αναπνέουμε καθαρό αέρα.</li>
+      </ul>
+      <p>Αν ικανοποιήσουμε τις παραπάνω ανάγκες, τότε είμαστε σε σωστό δρόμο, ο
+        καθένας οπλισμένος με την πυξίδα του.</p>
+      <p>Θεόδωρος Δεληγιαννίδης
+        thiodor@gmail.com</p>
+    </div>
+    <hr>
+  </div>
+  <div id="block">
+    <h1 id="title">Οδηγίες για compile της PHP από τον πηγαίο κώδικα </h1>
+    <div id="author">Theodoros Deligiannidis</div>
+    <div id="date">Τετάρτη, 18 Μαρτίου 2020</div>
+    <div id="content">
+      <p>Ο δεύτερος οδηγός μου είναι η μεταγλώττιση της PHP από τον πηγαίο κώδικα που στην ουσία είναι
+        συμπληρωματικός στον πρώτο οδηγό μιας και php(και συγκεκριμένα php-fpm) και
+        nginx συνήθως πάνε πακέτο.</p>
+      <p>Όταν τελειώσετε με τα παρακάτω βήματα θα έχετε στη διάθεση σας την τελευταία έκδοση
+        της PHP και του PHP-FPM.</p>
+      <h2 id="1">Βήμα 1ο: Πηγαίος κώδικας και ρυθμίσεις περιβάλλοντος</h2>
+      <p>Κάνουμε ένα φάκελο μέσα στο home όπου θα είναι εγκαταστημένα τα εκτελέσιμα αρχεία και τα
+        αρχεία ρυθμίσεων.</p>
+      <pre><code>mkdir ~/php
+</code></pre>
+      <p>Κατεβάζουμε την τελευταία έκδοση PHP 7.4</p>
+      <pre><code>wget https://www.php.net/distributions/php-7.4.3.tar.gz
+tar xzvf php-7.4.3.tar.gz
+cd php-7.4.3
+</code></pre>
+      <p>θα χρειαστείτε μερικά αναγκαία προγράμματα(και μερικά προαιρετικά όπως webp):</p>
+      <pre><code>sudo apt-get install -y libargon2-0-dev libzip-dev libzip4 libsqlite3-dev libonig-dev webp
+</code></pre>
+      <h2 id="2">Βήμα 2ο: Μεταγλώττιση</h2>
+      <p>Για τη δικιά σας ευκολία αλλά και σε περίπτωση που θέλετε να πειραματιστείτε πολλές φορές, μπορείτε
+        το configure να το ενσωματώσετε σε ένα σκριπτάκι bash που μπορείτε να το ονομάσετε όπως θέλετε:</p>
+      <pre><code>#!/bin/sh
+INSTALL_DIR=$HOME/bin/php7
+mkdir -p $INSTALL_DIR
+
+./configure 
+    --prefix=$INSTALL_DIR \
+    --enable-bcmath \
+    --enable-fpm \
+    --with-fpm-user=www-data \
+    --with-fpm-group=www-data \
+    --disable-cgi \
+    --enable-mbstring \
+    --enable-shmop \
+    --enable-sockets \
+    --enable-sysvmsg \
+    --enable-sysvsem \
+    --enable-sysvshm \
+    --with-zlib \
+    --with-curl \
+    --without-pear \
+    --with-openssl \
+    --enable-pcntl \
+    --with-password-argon2 \
+    --with-sodium \
+    --enable-mysqlnd \
+    --with-pdo-mysql \
+    --with-pdo-mysql=mysqlnd \
+    --enable-gd \
+    --with-jpeg  \
+    --enable-opcache \
+    --enable-zip \
+    --enable-exif
+</code></pre>
+      <p>Στο παραπνω σετ ρυθμίσεων, εκτός των άλλων, ενεργοποιούμε το opcache το οποίο είναι must για την PHP
+        και φυσικά την υποστηριξη mysql(<code>--enable-mysqlnd</code>), επεξεργασία εικόνων(<code>--enable-gd</code>) και άλλα.</p>
+      <p>Όταν είμαστε έτοιμοι, διαλέγουμε τις παραμέτρους για τον gcc:</p>
+      <pre><code>export CFLAGS='-Ofast -pipe -fomit-frame-pointer -march=native -fPIE -fstack-protector-strong -Wformat -Werror=format-security -Wdate-time -D_FORTIFY_SOURCE=2'  
+export CXXFLAGS="${CFLAGS}"
+export LDFLAGS='-Wl,-Bsymbolic-functions -fPIE -pie -Wl,-z,relro -Wl,-z,now'
+</code></pre>
+      <p>και τρέχουμε το σκριπτάκι:</p>
+      <pre><code>sh buildPHP.sh
+</code></pre>
+      <p>Αφού τελειώσει χωρίς σφάλματα προχωράμε στην μεταγλώττιση:</p>
+      <pre><code>make -j 4
+</code></pre>
+      <p>Η παράμετρος <code>-j 4</code> είναι προαιρετική και έχει να κάνει με τους διαθέσιμους πυρήνες του CPU σας επιταχύνοντας έτσι την μεταγλώττιση. Μπορείτε να το βρείτε δίνοντας:</p>
+      <pre><code>lscpu  |grep 'CPU(s)'
+CPU(s):              4
+</code></pre>
+      <p>Όταν το make τελειώσει χωρίς σφάλματα, κάνουμε εγκατάσταση δίνοντας:</p>
+      <pre><code>sudo make install
+</code></pre>
+      <h2 id="3php">Βήμα 3ο - Παραμετροποίηση της PHP</h2>
+      <p>Αρχικά κάνουμε αντιγραφή του php.ini που θα χρησιμοποιήσουμε:</p>
+      <pre><code>cp php.ini-development ~/php/php7/lib/php.ini
+nano ~/php/php7/lib/php.ini
+</code></pre>
+      <p>Θα χρειαστεί να ρυθμίσουμε μερικές παραμέτρους της PHP.</p>
+      <p>Ζώνη ώρας</p>
+      <pre><code>[Date]
+date.timezone=Europe/Athens
+</code></pre>
+      <p>Ο οδηγός της Mysql(PDO) αν αυτή τρέχει τοπικά</p>
+      <pre><code>pdo_mysql.default_socket=/var/run/mysqld/mysqld.sock
+</code></pre>
+      <p>Απενεργοποίηση του pathinfo για λόγους ασφαλείας:</p>
+      <pre><code>cgi.fix_pathinfo=0:
+</code></pre>
+      <p>Αφού τελειώσουμε με τις ρυθμίσεις της PHP, προχωράμε στις ρυθμίσεις του PHP-FPM. Θα χρειαστούμε ένα πρότυπο για να
+        δουλέψουμε, το οποίο βρίσκεται στο φακελο <code>~/php/php7/etc</code>:</p>
+      <pre><code>cd ~/php/php7/etc/; mv php-fpm.conf.default php-fpm.conf
+cd ~/php/php7/etc/php-fpm.d/; mv www.conf.default www.conf
+</code></pre>
+      <p>Ανοίγουμε το αρχείο <code>www.conf</code> και ελέγχουμε αν ο user και το group είναι το σωστό(<code>www-data</code>).</p>
+      <pre><code>user = www-data
+group = www-data
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+</code></pre>
+      <p>Σε περίπτωση που θέλουμε να χρησιμοποιήσουμε sockets αντί για TCP(είναι πιο γρήγορα αλλά με μερικούς περιορισμούς) τότε αλλάζουμε
+        την επιλογή <code>listen</code></p>
+      <pre><code>listen = /var/run/php-fpm.sock
+</code></pre>
+      <p>Επίσης, για λόγους ταχύτητας, καλό είναι να ενεργοποιήσουμε την επέκταση opcache που είναι διαθέσιμη γιατί κατά το configure δώσαμε
+        <code>--enable-opcache</code>. Ανοίγουμε το αρχείο <code>~/php/php7/lib/php.ini</code> και προσθέτουμε την γραμμή </p>
+      <pre><code>zend_extension=~/php/php7/lib/php/extensions/no-debug-non-zts-20190902/opcache.so
+</code></pre>
+      <p>Τέλος ξεκινάμε τo php-fpm με την εντολή:</p>
+      <pre><code>sudo $HOME/php/php7/sbin/php-fpm
+</code></pre>
+      <h2 id="4nginx">Βήμα 4ο - Σύνδεση με τον NGINX</h2>
+      <p>Αν και δεν είναι στο πλαίσιο αυτού του οδηγού το πως θα ρυθμίσετε τη PHP με τον NGINX, παρακάτω θα βρείτε ένα παράδειγμα
+        για το πως ρυθμίζεται η PHP μέσα στο server block του NGINX:</p>
+      <pre><code>location ~ \.php$ {
+    include fastcgi_params;
+    fastcgi_intercept_errors on;
+    fastcgi_pass unix:/var/run/php-fpm.sock;
+    fastcgi_param SCRIPT_FILENAME $document_root/$fastcgi_script_name;
+}
+</code></pre>
+      <p>Βλέπουμε οτι στη παράμετρο fastcgi_pass δώσαμε socket αντί για TCP μιας και στο 3ο βήμα το αλλάξαμε από <code>listen = 127.0.0.1:9000
+        </code> που ήταν το default.</p>
+      <p>Happy compiling!</p>
+      <p>Ο οδηγός βασίστηκε πάνω σε αυτό το άρθρο: https://github.com/gitKearney/php7-from-scratch</p>
+      <p>Θεόδωρος Δεληγιαννίδης
+        thiodor@gmail.com</p>
+    </div>
+    <hr>
+  </div>
+  <div id="block">
+    <h1 id="title">Οδηγίες για compile του Nginx από τον πηγαίο κώδικα </h1>
+    <div id="author">Theodoros Deligiannidis</div>
+    <div id="date">Κυριακή, 15 Μαρτίου 2020</div>
+    <div id="content">
+      <p>Ο παρακάτω οδηγός θα σας βοηθήσει να μεταγλωττίσετε(compile) τον διακομιστή HTTP
+        NGINX. Ο οδηγός γράφτηκε για Ubuntu server 18.04.4 αλλά προσαρμόζεται εύκολα και σε άλλες εκδόσεις.</p>
+      <h2 id="nginx">Για ποιο λόγο να εγκαταστήσω τον NGINX με αυτό τον τρόπο και όχι μέσω της διανομής μου;</h2>
+      <p>Οι λόγοι είναι αρκετοί και διαφέρουν από χρήστη σε χρήστη. Ένας λόγος
+        είναι ότι θα έχετε πάντα την τελευταία έκδοση η οποία περιέχει και τις πιο πρόσφατες ενημερώσεις
+        ασφαλείας.</p>
+      <p>Επίσης, πολλές φορές τα έτοιμα πακέτα των διανομών, υστερούν σε ορισμένα χαρακτηριστικά τα οποία για μερικούς είναι αναγκαία, πχ υποστήριξη για streaming αρχεία MP4 (ngx<em>http</em>mp4_module) ή όπως θα δείτε πιο κάτω υποστήριξη brotli compression. Ένα άλλο πλεονέκτημα είναι μια μικρή αύξηση στις επιδόσεις του nginx αλλά και το μικρότερο memory footprint.</p>
+      <h2 id="1">Βήμα 1ο: Πηγαίος κώδικας και ρυθμίσεις περιβάλλοντος</h2>
+      <p>Κατεβάστε τον πηγαίο κώδικα. Ο nginx είναι διαθέσιμος σε 2 εκδόσεις: <strong>Mainline</strong> και <strong>Stable</strong>. <a href="https://www.nginx.com/blog/nginx-1-6-1-7-released">Πατήστε εδώ</a> για να δείτε ποια έκδοση σας ταιριάζει.</p>
+      <pre><code>wget https://nginx.org/download/nginx-1.16.1.tar.gz
+tar xfv nginx-1.16.1.tar.gz
+</code></pre>
+      <p>θα χρειαστούμε άλλες 3 βιβλιοθήκες τις οποίες χρησιμοποιεί ο nginx: </p>
+      <pre><code>wget https://www.openssl.org/source/openssl-1.1.1d.tar.gz &amp;&amp; tar xzvf openssl-1.1.1d.tar.gz  
+wget https://www.zlib.net/zlib-1.2.11.tar.gz &amp;&amp; tar xzvf zlib-1.2.11.tar.gz  
+wget https://ftp.pcre.org/pub/pcre/pcre-8.44.tar.gz &amp;&amp; tar xzvf pcre-8.44.tar.gz  
+</code></pre>
+      <p>Για να μεταγλωττίσουμε τον nginx είναι αναγκαία μερικά πακέτα όπως gcc, make κτλ:</p>
+      <pre><code>sudo apt install build-essential -y
+</code></pre>
+      <p>Τέλος, έμεινε να ρυθμίσουμε τις παραμέτρους μεταγλώττισης για τον compiler gcc(προαιρετικό).</p>
+      <pre><code>export CFLAGS='-Ofast -pipe -fomit-frame-pointer -march=native -fPIE -fstack-protector-strong -Wformat -Werror=format-security -Wdate-time -D_FORTIFY_SOURCE=2'  
+export CXXFLAGS="${CFLAGS}"
+export LDFLAGS='-Wl,-Bsymbolic-functions -fPIE -pie -Wl,-z,relro -Wl,-z,now'
+</code></pre>
+      <p>Για περισσότερες πληροφορίες, μπορείτε να διαβάσετε περισσότερα εδώ https://developers.redhat.com/blog/2018/03/21/compiler-and-linker-flags-gcc και εδώ https://wiki.gentoo.org/wiki/GCC_optimization . </p>
+      <h2 id="2">Βήμα 2ο: Μεταγλώττιση</h2>
+      <p>Πρώτα κάνουμε configure που θα θέσει τις απαραίτητες οδηγίες για την μεταγλώττιση. Αυτό το βήμα είναι το πιο σημαντικό
+        μιας και εδώ θα ορίσουμε τι θα υποστηρίζει ο ngixn, ποια modules θα είναι διαθέσιμα(στατικά ή δυναμικά - static / dynamic),
+        ποιοι θα είναι οι φάκελοι εγκατάστασης και άλλα:</p>
+      <pre><code>./configure 
+    --with-openssl=../openssl-1.1.1d 
+    --with-pcre=../pcre-8.44 
+    --with-zlib=../zlib-1.2.11 
+    --user=www-data 
+    --group=www-data 
+    --build=my-nginx 
+    --with-openssl-opt=no-nextprotoneg 
+    --with-openssl-opt=no-weak-ssl-ciphers 
+    --with-pcre-jit 
+    --with-file-aio  
+    --with-threads 
+    --with-http_gzip_static_module 
+    --with-debug 
+    --with-http_ssl_module 
+    --with-http_geoip_module 
+    --with-http_v2_module
+</code></pre>
+      <p>Η πλήρης λίστα με τις διαθέσιμες επιλογές βρίσκεται online https://nginx.org/en/docs/configure.html ή δίνοντας </p>
+      <pre><code>./configure --help
+</code></pre>
+      <p>Τα παραπάνω είναι ενδεικτικά και εξαρτάται από την χρήση που θα κάνετε, τα εξωτερικά modules που θέλετε να είναι διαθέσιμα.
+        Για παράδειγμα αν θέλουμε συμπίεση brotli τότε προσθέτουμε <code>--add-module=../ngx_brotli</code> ή <code>--add-dynamic-module=../brotli</code> για δυναμικά modules που τα φορτώνουμε με την παράμετρο <code>load_module</code></p>
+      <pre><code>load_module /path/to/modules/ngx_http_execute_module.so;
+</code></pre>
+      <p>Αφού τελειώσει χωρίς σφάλματα προχωράμε στην μεταγλώττιση:</p>
+      <pre><code>make -j 4
+</code></pre>
+      <p>Η παράμετρος <code>-j 4</code> είναι προαιρετική και έχει να κάνει με τους διαθέσιμους πυρήνες του CPU σας επιταχύνοντας έτσι την μεταγλώττιση. Μπορείτε να το βρείτε δίνοντας:</p>
+      <pre><code>lscpu  |grep 'CPU(s)'
+CPU(s):              4
+</code></pre>
+      <p>Όταν το make τελειώσει χωρίς σφάλματα, κάνουμε εγκατάσταση δίνοντας:</p>
+      <pre><code>sudo make install
+</code></pre>
+      <p>Ο προεπιλεγμένος φάκελος εγκατάστασης είναι <code>/usr/local/nginx/</code> αλλά αυτό αλλάζει με την παράμετρο <code>--prefix=/path</code>.
+        Εκεί μέσα θα βρείτε και το αρχείο <code>nginx.conf</code> που βρίσκονται οι ρυθμίσεις του nginx. Οι προεπιλεγμένες ρυθμίσεις είναι αρκέτε για να ξεκινήσετε
+        και μπορείτε να βεβαιωθείτε ότι όλα δουλεύουν σωστά με την εντολή:</p>
+      <pre><code>sudo /usr/local/nginx/sbin/nginx -t
+</code></pre>
+      <p>Τέλος, ξεκινάμε τον nginx:</p>
+      <pre><code>sudo /usr/local/nginx/sbin/nginx
+</code></pre>
+      <h2 id="3module">Βήμα 3ο(προαιρετικό): Ενσωμάτωση module κατά την μεταγλώττιση</h2>
+      <p>Σαν παράδειγμα θα προσθέσουμε το brotli(συμπίεση δεδομένων) στον nginx ως στατικό module με την παράμετρο <code>--add-module=</code> . Στο κεντρικό φάκελο κατεβάστε με git το project:</p>
+      <pre><code>git clone https://github.com/eustas/ngx_brotli.git
+cd ngx_brotli &amp;&amp; git submodule update --init
+</code></pre>
+      <p>Προσθέτουμε την παράμετρο <code>--add-module=../ngx_brotli</code> στο configure του nginx και επαναλαμβάνουμε το 2ο βήμα.</p>
+      <p>Στο άρχειο ρυθμίσεων του nginx μέσα στο http{..} θα πρέπει να προσθέσουμε τα εξής:</p>
+      <pre><code>sudo nano /usr/local/nginx/conf/nginx.conf
+brotli on;
+brotli_comp_level 11;    # τιμές μεταξύ 1 και 11
+brotli_types text/plain text/css application/javascript application/json image/svg+xml application/xml+rss;
+</code></pre>
+      <p>Εδώ μπορείτε να δείτε ποιοι browsers υποστηρίζουν την συμπίεση brotli: https://caniuse.com/#feat=brotli.</p>
+      <p>Για να δείτε αν δουλεύει η συμπίεση brotli ανοίξτε την ιστοσελίδα σας και μέσα από τα developers tools ψάξτε για τη λέξη <code>br</code> στα
+        response headers.</p>
+      <p>Happy compiling!</p>
+      <p>Θεόδωρος Δεληγιαννίδης
+        thiodor@gmail.com</p>
+    </div>
+    <hr>
+  </div>
+</body>
+
+</html>
