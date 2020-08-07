@@ -13,7 +13,7 @@ An autocomplete plug-in was developed from scratch, reassigned proper indexes in
 ####[jollymoments.com](https://jollymoments.com)
 ![jollymoments.com](assets/img/sldr-picks/jollymoments.jpg)
 
-This is my first SaaS attempt started in late 2017 - a wedding website builder.
+This ~~is~~was my first SaaS attempt started in late 2017 - a wedding website builder(now terminated).
 
 Everything is made from scratch with Laravel and MariaDB and it is composed of 3 distinct parts: the landing page(Bulma CSS), client admin panel and the client's wedding webpage.
 
